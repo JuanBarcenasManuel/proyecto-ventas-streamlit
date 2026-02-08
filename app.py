@@ -8,16 +8,6 @@ from datetime import datetime, timedelta
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Predicción Pollo", layout="wide", page_icon="🍗")
 
-# --- ESTILO CSS ---
-st.markdown("""
-    <style>
-    .stMetric { 
-        background-color: #ffffff; padding: 20px; border-radius: 12px; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid #eee;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
 # --- CARGAR MODELO ---
 @st.cache_resource
 def load_model():
@@ -65,54 +55,60 @@ if predict_btn and model:
     pred = model.predict(features_df[order])[0]
 
 # --- UI PRINCIPAL ---
-st.title("🍗 Proyección de Demanda Pollo Supermercado")
-st.markdown("---")
+st.title("🍗 Proyección de Demanda Pollo")
 
-col1, col2 = st.columns([1, 2], gap="large")
+col1, col2 = st.columns([1, 2])
 
 with col1:
-    st.subheader("🎯 Resultado")
     if pred is not None:
-        delta_val = ((pred / lag1) - 1) * 100
-        st.metric(label=f"Predicción {fecha_sel}", value=f"${pred:,.2f}", delta=f"{delta_val:.2f}% vs ayer")
+        st.metric(label="Resultado Predicho", value=f"${pred:,.2f}")
     else:
-        st.info("Presiona el botón para calcular.")
+        st.info("Presiona el botón para calcular")
 
 with col2:
-    st.subheader(f"📈 Proyección desde {fecha_sel}")
-    
-    # Generar fechas futuras
+    # Generamos los datos para la gráfica
     fechas_futuras = pd.date_range(start=pd.Timestamp(fecha_sel), periods=30)
-    base_val = pred if pred is not None else lag1
-    ventas_proyectadas = np.random.normal(base_val, 800, size=30)
+    # Si no hay pred, usamos lag1 para la simulación
+    base = pred if pred is not None else lag1
+    ventas_proyectadas = np.random.normal(base, 500, size=30)
     if pred is not None: ventas_proyectadas[0] = pred
 
     fig = go.Figure()
 
-    # 1. El área roja (Tendencia)
+    # Serie de tiempo
     fig.add_trace(go.Scatter(
         x=fechas_futuras, y=ventas_proyectadas,
-        mode='lines', line=dict(color='#ff4b4b', width=3),
-        fill='tozeroy', name="Tendencia"
+        mode='lines+markers',
+        line=dict(color='#ff4b4b'),
+        name="Proyección"
     ))
 
-    # 2. LA ETIQUETA (Aquí es donde forzamos el texto)
+    # Si hay predicción, agregamos el diamante y la ANOTACIÓN FORZADA
     if pred is not None:
+        # 1. El diamante
         fig.add_trace(go.Scatter(
-            x=[fechas_futuras[0]], 
-            y=[pred],
-            mode='markers+text', # Marcador + Texto
-            text=[f"<b>${pred:,.0f}</b>"], # Texto en negrita
-            textposition="top center",
-            textfont=dict(size=16, color="black"),
-            marker=dict(color='black', size=14, symbol='diamond'),
+            x=[fechas_futuras[0]], y=[pred],
+            mode='markers',
+            marker=dict(color='black', size=15, symbol='diamond'),
             showlegend=False
         ))
 
-    fig.update_layout(
-        height=450, margin=dict(l=0, r=0, t=50, b=0),
-        xaxis=dict(showgrid=False),
-        yaxis=dict(title="Ventas ($)", gridcolor='rgba(0,0,0,0.1)')
-    )
-    
+        # 2. LA ANOTACIÓN (El texto que no falla)
+        fig.add_annotation(
+            x=fechas_futuras[0],
+            y=pred,
+            text=f"<b>VALOR: ${pred:,.0f}</b>",
+            showarrow=True,
+            arrowhead=2,
+            ax=0,
+            ay=-40, # Distancia hacia arriba
+            bgcolor="black",
+            font=dict(color="white", size=14),
+            bordercolor="black",
+            borderwidth=2,
+            borderpad=4,
+            opacity=0.9
+        )
+
+    fig.update_layout(height=450, margin=dict(l=0, r=0, t=20, b=0))
     st.plotly_chart(fig, use_container_width=True)
