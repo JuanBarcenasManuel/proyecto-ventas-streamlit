@@ -12,11 +12,8 @@ st.set_page_config(page_title="Predicción Pollo", layout="wide", page_icon="�
 st.markdown("""
     <style>
     .stMetric { 
-        background-color: #ffffff; 
-        padding: 20px; 
-        border-radius: 12px; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        border: 1px solid #eee;
+        background-color: #ffffff; padding: 20px; border-radius: 12px; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid #eee;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -43,20 +40,18 @@ def create_features_row(date):
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Configuración")
-    fecha_sel = st.date_input("Fecha de Inicio", datetime(2025, 11, 17))
-    
+    fecha_sel = st.date_input("📅 Fecha de Inicio", datetime(2025, 11, 17))
     st.divider()
     st.subheader("📊 Datos de Entrada")
     lag1 = st.number_input("Ventas Ayer ($)", value=15000)
     lag7 = st.number_input("Ventas hace 7 días ($)", value=14500)
     roll7 = st.number_input("Promedio Semanal ($)", value=14800)
-    predict_btn = st.button(" Calcular Proyección", use_container_width=True)
+    predict_btn = st.button("🚀 Calcular Proyección", use_container_width=True)
 
 # --- LÓGICA DE PREDICCIÓN ---
 pred = None
 if predict_btn and model:
     features_df = create_features_row(fecha_sel)
-    # Llenado de características para el modelo
     features_df['Ventas_Netas_lag1'] = lag1
     features_df['Ventas_Netas_lag7'] = lag7
     features_df['Ventas_Netas_lag14'] = lag7 * 0.95
@@ -76,61 +71,48 @@ st.markdown("---")
 col1, col2 = st.columns([1, 2], gap="large")
 
 with col1:
-    st.subheader("🎯 Resultado de Predicción")
-    if pred:
+    st.subheader("🎯 Resultado")
+    if pred is not None:
         delta_val = ((pred / lag1) - 1) * 100
-        st.metric(
-            label=f"Valor Predicho para {fecha_sel}", 
-            value=f"${pred:,.2f}", 
-            delta=f"{delta_val:.2f}% vs ayer"
-        )
+        st.metric(label=f"Predicción {fecha_sel}", value=f"${pred:,.2f}", delta=f"{delta_val:.2f}% vs ayer")
     else:
-        st.info("Presiona el botón para generar la etiqueta de datos en la gráfica.")
+        st.info("Presiona el botón para calcular.")
 
 with col2:
-    st.subheader(f"📈 Tendencia Proyectada (Desde {fecha_sel})")
+    st.subheader(f"📈 Proyección desde {fecha_sel}")
     
-    # Generamos 30 días hacia adelante
+    # Generar fechas futuras
     fechas_futuras = pd.date_range(start=pd.Timestamp(fecha_sel), periods=30)
-    start_value = pred if pred else lag1
-    ventas_proyectadas = np.random.normal(start_value, 800, size=30)
-    
-    if pred:
-        ventas_proyectadas[0] = pred
+    base_val = pred if pred is not None else lag1
+    ventas_proyectadas = np.random.normal(base_val, 800, size=30)
+    if pred is not None: ventas_proyectadas[0] = pred
 
     fig = go.Figure()
 
-    # 1. Línea de proyección
+    # 1. El área roja (Tendencia)
     fig.add_trace(go.Scatter(
-        x=fechas_futuras, 
-        y=ventas_proyectadas, 
-        mode='lines', 
-        line=dict(color='#ff4b4b', width=3), 
-        fill='tozeroy',
-        name="Tendencia"
+        x=fechas_futuras, y=ventas_proyectadas,
+        mode='lines', line=dict(color='#ff4b4b', width=3),
+        fill='tozeroy', name="Tendencia"
     ))
 
-    # 2. LA ETIQUETA DE RESULTADO (Punto destacado con texto)
-    if pred:
+    # 2. LA ETIQUETA (Aquí es donde forzamos el texto)
+    if pred is not None:
         fig.add_trace(go.Scatter(
             x=[fechas_futuras[0]], 
             y=[pred],
-            mode='markers+text',
-            text=[f"PREDICCIÓN: ${pred:,.0f}"], # <-- AQUÍ ESTÁ LA ETIQUETA
+            mode='markers+text', # Marcador + Texto
+            text=[f"<b>${pred:,.0f}</b>"], # Texto en negrita
             textposition="top center",
-            textfont=dict(family="Arial Black", size=14, color="black"),
-            marker=dict(color='black', size=15, symbol='diamond-dot'),
-            name="Resultado"
+            textfont=dict(size=16, color="black"),
+            marker=dict(color='black', size=14, symbol='diamond'),
+            showlegend=False
         ))
 
     fig.update_layout(
-        height=450, 
-        margin=dict(l=0, r=0, t=40, b=0), 
-        showlegend=False, 
+        height=450, margin=dict(l=0, r=0, t=50, b=0),
         xaxis=dict(showgrid=False),
-        yaxis=dict(title="Ventas Estimadas ($)", gridcolor='rgba(0,0,0,0.1)')
+        yaxis=dict(title="Ventas ($)", gridcolor='rgba(0,0,0,0.1)')
     )
     
     st.plotly_chart(fig, use_container_width=True)
-
-st.divider()
