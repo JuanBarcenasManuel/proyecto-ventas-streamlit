@@ -3,10 +3,18 @@ import pandas as pd
 import numpy as np
 import pickle
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
+from datetime import datetime
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Predicción de Ventas: Pollo", layout="wide")
+# --- CONFIGURACIÓN ---
+st.set_page_config(page_title="Predicción Ventas Pollo", layout="wide", page_icon="🍗")
+
+# Estilo personalizado con CSS para que se vea más pro
+st.markdown("""
+    <style>
+    .main { background-color: #f5f7f9; }
+    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    </style>
+    """, unsafe_allow_html=True)
 
 # --- CARGAR MODELO ---
 @st.cache_resource
@@ -14,77 +22,97 @@ def load_model():
     try:
         with open('model.pkl', 'rb') as f:
             return pickle.load(f)
-    except FileNotFoundError:
-        st.error("Archivo 'model.pkl' no encontrado. Asegúrate de subirlo a tu repo.")
+    except Exception as e:
         return None
 
 model = load_model()
 
-# --- FUNCIONES DE PROCESAMIENTO CORREGIDAS ---
 def create_features_row(date):
-    # Convertimos la fecha de Streamlit a un objeto de Pandas para acceder a sus atributos
     date_pd = pd.Timestamp(date)
-    
     return pd.DataFrame({
-        'día': [date_pd.day],
-        'díadelasemana': [date_pd.dayofweek],
-        'mes': [date_pd.month],
-        'trimestre': [date_pd.quarter],
-        'año': [date_pd.year],
-        'díadelaño': [date_pd.dayofyear]
+        'día': [date_pd.day], 'díadelasemana': [date_pd.dayofweek],
+        'mes': [date_pd.month], 'trimestre': [date_pd.quarter],
+        'año': [date_pd.year], 'díadelaño': [date_pd.dayofyear]
     })
 
-# --- INTERFAZ DE USUARIO ---
-st.title("🍗 Dashboard de Proyección de Ventas: Pollo")
-st.markdown("Este modelo utiliza **XGBoost** para predecir las ventas diarias.")
+# --- ENCABEZADO ---
+st.title("🍗 Proyección de Demanda: Avícola")
+st.info("Utiliza inteligencia artificial (XGBoost) para optimizar el inventario basado en ventas históricas.")
 
-# Sidebar para inputs manuales
-st.sidebar.header("Predicción Individual")
-fecha_sel = st.sidebar.date_input("Selecciona una fecha", datetime(2025, 11, 1))
-
-# Inputs para los Lags
-st.sidebar.subheader("Datos Históricos Recientes")
-lag1 = st.sidebar.number_input("Ventas ayer (Lag 1)", value=15000)
-lag7 = st.sidebar.number_input("Ventas hace 1 semana (Lag 7)", value=14500)
-roll7 = st.sidebar.number_input("Promedio última semana", value=14800)
-
-# --- COLUMNAS PARA ORGANIZAR EL DASHBOARD ---
-col1, col2 = st.columns([1, 2])
-
-with col1:
-    if st.sidebar.button("Predecir"):
-        if model is not None:
-            # Crear el vector de características
-            features_df = create_features_row(fecha_sel)
-            features_df['Ventas_Netas_lag1'] = lag1
-            features_df['Ventas_Netas_lag7'] = lag7
-            features_df['Ventas_Netas_lag14'] = lag7 * 0.9 
-            features_df['Ventas_Netas_lag30'] = lag7 * 1.1
-            features_df['Ventas_Netas_rolling7'] = roll7
-            features_df['Ventas_Netas_rolling30'] = roll7 * 0.95
-            
-            # Orden de columnas (Asegúrate que coincida con tu entrenamiento)
-            order = ['día', 'díadelasemana', 'mes', 'trimestre', 'año', 'díadelaño',
-                    'Ventas_Netas_lag1', 'Ventas_Netas_lag7', 'Ventas_Netas_lag14', 'Ventas_Netas_lag30', 
-                    'Ventas_Netas_rolling7', 'Ventas_Netas_rolling30']
-            
-            prediction = model.predict(features_df[order])
-            
-            st.metric(label=f"Venta Predicha para {fecha_sel}", value=f"${prediction[0]:,.2f}")
-        else:
-            st.warning("Carga un modelo válido para predecir.")
-
-with col2:
-    st.subheader("Serie de Tiempo: Histórico y Tendencia")
-    # Generamos datos de ejemplo (Reemplaza esto cargando tu CSV real)
-    fechas_hist = pd.date_range(end=datetime.now(), periods=30)
-    datos_hist = np.random.randint(13000, 16000, size=30)
+# --- SIDEBAR MEJORADO ---
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/1046/1046769.png", width=100) # Un icono de comida
+    st.header("Configuración")
+    fecha_sel = st.date_input("📅 Fecha a Predecir", datetime.now())
     
-    df_grafico = pd.DataFrame({'Fecha': fechas_hist, 'Ventas': datos_hist})
+    st.divider()
+    st.subheader("Datos de Entrada")
+    lag1 = st.number_input("Ventas Ayer ($)", value=15000, step=500)
+    lag7 = st.number_input("Ventas hace 7 días ($)", value=14500, step=500)
+    roll7 = st.number_input("Promedio Semanal ($)", value=14800, step=500)
     
-    # Crear gráfico con Plotly
+    predict_btn = st.button("🚀 Calcular Predicción", use_container_width=True)
+
+# --- CUERPO PRINCIPAL ---
+col_stats, col_chart = st.columns([1, 2], gap="large")
+
+with col_stats:
+    st.subheader("Resultado")
+    if predict_btn and model:
+        features_df = create_features_row(fecha_sel)
+        # Añadir lags
+        for col, val in zip(['Ventas_Netas_lag1', 'Ventas_Netas_lag7', 'Ventas_Netas_rolling7'], [lag1, lag7, roll7]):
+            features_df[col] = val
+        
+        # Mantenemos las que faltan por defecto o cálculo simple
+        features_df['Ventas_Netas_lag14'] = lag7 * 0.95
+        features_df['Ventas_Netas_lag30'] = lag7 * 1.05
+        features_df['Ventas_Netas_rolling30'] = roll7 * 0.98
+
+        order = ['día', 'díadelasemana', 'mes', 'trimestre', 'año', 'díadelaño',
+                'Ventas_Netas_lag1', 'Ventas_Netas_lag7', 'Ventas_Netas_lag14', 
+                'Ventas_Netas_lag30', 'Ventas_Netas_rolling7', 'Ventas_Netas_rolling30']
+        
+        pred = model.predict(features_df[order])[0]
+        
+        # Mostrar métricas bonitas
+        st.metric(label="Venta Estimada", value=f"${pred:,.2f}", delta=f"{((pred/lag1)-1)*100:.1f}% vs ayer")
+        
+        with st.expander("Ver detalles técnicos"):
+            st.write("Características enviadas al modelo:")
+            st.dataframe(features_df[order].T)
+    else:
+        st.write("Configura los valores y haz clic en predecir.")
+
+with col_chart:
+    st.subheader("📈 Análisis de Tendencias")
+    
+    # Datos simulados más realistas (reemplazar por CSV)
+    fechas = pd.date_range(end=datetime.now(), periods=30)
+    ventas = np.random.normal(15000, 1500, size=30)
+    
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df_grafico['Fecha'], y=df_grafico['Ventas'], mode='lines+markers', name='Ventas Históricas'))
-    fig.update_layout(margin=dict(l=20, r=20, t=40, b=20), height=400)
+    fig.add_trace(go.Scatter(
+        x=fechas, y=ventas,
+        mode='lines+markers',
+        name='Historial',
+        line=dict(color='#ff4b4b', width=3),
+        fill='tozeroy' # Área rellena para que se vea más moderno
+    ))
+    
+    fig.update_layout(
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        margin=dict(l=0, r=0, t=30, b=0),
+        height=350,
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=True, gridcolor='LightGray')
+    )
     
     st.plotly_chart(fig, use_container_width=True)
+
+# --- TABLA DE DATOS ---
+st.divider()
+st.subheader("📋 Datos Recientes")
+df_tabla = pd.DataFrame({'Fecha': fechas, 'Ventas ($)': ventas}).sort_values(by='Fecha', ascending=False)
+st.dataframe(df_tabla.head(7), use_container_width=True)
