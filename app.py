@@ -5,10 +5,10 @@ import pickle
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
-# --- CONFIGURACIÓN ---
+# --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Predicción Pollo", layout="wide", page_icon="🍗")
 
-# --- CARGAR MODELO ---
+# --- 2. CARGAR MODELO ---
 @st.cache_resource
 def load_model():
     try:
@@ -19,6 +19,10 @@ def load_model():
 
 model = load_model()
 
+# Inicializamos el estado de la predicción si no existe
+if 'mi_prediccion' not in st.session_state:
+    st.session_state.mi_prediccion = None
+
 def create_features_row(date):
     date_pd = pd.Timestamp(date)
     return pd.DataFrame({
@@ -27,7 +31,7 @@ def create_features_row(date):
         'año': [date_pd.year], 'díadelaño': [date_pd.dayofyear]
     })
 
-# --- SIDEBAR ---
+# --- 3. SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Configuración")
     fecha_sel = st.date_input("📅 Fecha de Inicio", datetime(2025, 11, 11))
@@ -36,92 +40,91 @@ with st.sidebar:
     lag1 = st.number_input("Ventas Ayer ($)", value=15000)
     lag7 = st.number_input("Ventas hace 7 días ($)", value=14500)
     roll7 = st.number_input("Promedio Semanal ($)", value=14800)
-    predict_btn = st.button("🚀 Calcular Proyección", use_container_width=True)
-
-# --- LÓGICA DE PREDICCIÓN ---
-pred = None
-# IMPORTANTE: Guardamos el estado de la predicción para que no se borre al refrescar
-if predict_btn and model:
-    features_df = create_features_row(fecha_sel)
-    features_df['Ventas_Netas_lag1'] = lag1
-    features_df['Ventas_Netas_lag7'] = lag7
-    features_df['Ventas_Netas_lag14'] = lag7 * 0.95
-    features_df['Ventas_Netas_lag30'] = lag7 * 1.05
-    features_df['Ventas_Netas_rolling7'] = roll7
-    features_df['Ventas_Netas_rolling30'] = roll7 * 0.98
     
-    order = ['día', 'díadelasemana', 'mes', 'trimestre', 'año', 'díadelaño',
-            'Ventas_Netas_lag1', 'Ventas_Netas_lag7', 'Ventas_Netas_lag14', 
-            'Ventas_Netas_lag30', 'Ventas_Netas_rolling7', 'Ventas_Netas_rolling30']
-    pred = model.predict(features_df[order])[0]
+    if st.button("🚀 Calcular Proyección", use_container_width=True):
+        if model:
+            features_df = create_features_row(fecha_sel)
+            features_df['Ventas_Netas_lag1'] = lag1
+            features_df['Ventas_Netas_lag7'] = lag7
+            features_df['Ventas_Netas_lag14'] = lag7 * 0.95
+            features_df['Ventas_Netas_lag30'] = lag7 * 1.05
+            features_df['Ventas_Netas_rolling7'] = roll7
+            features_df['Ventas_Netas_rolling30'] = roll7 * 0.98
+            
+            order = ['día', 'díadelasemana', 'mes', 'trimestre', 'año', 'díadelaño',
+                    'Ventas_Netas_lag1', 'Ventas_Netas_lag7', 'Ventas_Netas_lag14', 
+                    'Ventas_Netas_lag30', 'Ventas_Netas_rolling7', 'Ventas_Netas_rolling30']
+            
+            # GUARDAMOS EN EL SESSION STATE
+            resultado = model.predict(features_df[order])[0]
+            st.session_state.mi_prediccion = resultado
+        else:
+            st.error("No se encontró el archivo model.pkl")
 
-# --- UI PRINCIPAL ---
-st.title("🍗 Proyección de Demanda Pollo")
+# --- 4. UI PRINCIPAL ---
+st.title("🍗 Dashboard de Proyección: Pollo")
 
 col1, col2 = st.columns([1, 2])
 
+# Recuperamos el valor del estado persistente
+pred_final = st.session_state.mi_prediccion
+
 with col1:
-    if pred is not None:
-        st.metric(label=f"Predicción para {fecha_sel}", value=f"${pred:,.2f}")
+    st.subheader("🎯 Resultado")
+    if pred_final is not None:
+        st.metric(label=f"Predicción {fecha_sel}", value=f"${pred_final:,.2f}")
     else:
-        st.info("Haz clic en 'Calcular Proyección' para ver el valor en el gráfico.")
+        st.info("Presiona el botón para calcular.")
 
 with col2:
-    # Generar datos
+    st.subheader("📈 Gráfico de Tendencia")
+    
+    # Datos de la serie
     fechas_futuras = pd.date_range(start=pd.Timestamp(fecha_sel), periods=30)
-    # Simulación de tendencia
-    base = pred if pred is not None else lag1
-    ventas_proy = np.random.normal(base, 500, size=30)
-    if pred is not None: ventas_proy[0] = pred
+    base = pred_final if pred_final is not None else lag1
+    
+    # Generamos una serie que siempre empiece en el valor de la predicción
+    ventas_proy = np.random.normal(base, 600, size=30)
+    if pred_final is not None:
+        ventas_proy[0] = pred_final
 
     fig = go.Figure()
 
-    # Gráfico de línea con puntos
+    # Línea de tendencia
     fig.add_trace(go.Scatter(
         x=fechas_futuras, y=ventas_proy,
         mode='lines+markers',
         line=dict(color='#ff4b4b', width=3),
-        marker=dict(size=6),
-        name="Tendencia"
+        name="Proyección"
     ))
 
-    # ETIQUETA FORZADA (Solo si hay predicción)
-    if pred is not None:
-        # Añadimos el punto diamante negro
+    # SOLO DIBUJAMOS LA ETIQUETA SI YA SE CALCULÓ
+    if pred_final is not None:
+        # El diamante negro
         fig.add_trace(go.Scatter(
-            x=[fechas_futuras[0]], y=[pred],
+            x=[fechas_futuras[0]], y=[pred_final],
             mode='markers',
-            marker=dict(color='black', size=14, symbol='diamond'),
+            marker=dict(color='black', size=15, symbol='diamond'),
             showlegend=False
         ))
 
-        # Añadimos la anotación con flecha y caja de texto
+        # LA ANOTACIÓN (Burbuja de texto)
         fig.add_annotation(
             x=fechas_futuras[0],
-            y=pred,
-            text=f"VALOR PREDICHO:<br><b>${pred:,.0f}</b>",
+            y=pred_final,
+            text=f"<b>VALOR PREDICHO:<br>${pred_final:,.0f}</b>",
             showarrow=True,
             arrowhead=2,
-            ax=40, # Mover flecha a la derecha
-            ay=-50, # Mover flecha hacia arriba
-            bgcolor="rgba(0,0,0,0.8)",
+            ax=50, ay=-50,
+            bgcolor="black",
             font=dict(color="white", size=14),
-            bordercolor="black",
-            borderwidth=2,
-            borderpad=6,
-            align="center"
+            borderpad=6
         )
 
-    # Ajustamos márgenes para que la etiqueta no se corte
     fig.update_layout(
-        height=500,
-        margin=dict(l=10, r=10, t=50, b=10),
-        xaxis=dict(showgrid=False),
-        yaxis=dict(
-            title="Ventas ($)",
-            gridcolor='rgba(0,0,0,0.1)',
-            range=[min(ventas_proy)*0.9, max(ventas_proy)*1.2] # Damos espacio arriba para la etiqueta
-        )
+        height=450,
+        margin=dict(l=0, r=0, t=30, b=0),
+        yaxis=dict(range=[min(ventas_proy)*0.8, max(ventas_proy)*1.3]) # Espacio para la etiqueta
     )
     
     st.plotly_chart(fig, use_container_width=True)
