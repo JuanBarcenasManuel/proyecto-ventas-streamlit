@@ -3,15 +3,14 @@ import pandas as pd
 import numpy as np
 import pickle
 import plotly.graph_objects as go
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Predicción Ventas Pollo", layout="wide", page_icon="🍗")
+st.set_page_config(page_title="Predicción Pollo", layout="wide", page_icon="🍗")
 
-# Estilo CSS para mejorar la estética de las tarjetas de métricas
+# --- CSS PERSONALIZADO ---
 st.markdown("""
     <style>
-    .main { background-color: #f5f7f9; }
     .stMetric { 
         background-color: #ffffff; 
         padding: 20px; 
@@ -28,129 +27,111 @@ def load_model():
     try:
         with open('model.pkl', 'rb') as f:
             return pickle.load(f)
-    except Exception as e:
-        st.error(f"Error al cargar el modelo: {e}")
+    except:
         return None
 
 model = load_model()
 
-# --- PROCESAMIENTO DE FECHAS ---
 def create_features_row(date):
-    # pd.Timestamp soluciona el error 'AttributeError: datetime.date object has no attribute dayofweek'
     date_pd = pd.Timestamp(date)
     return pd.DataFrame({
-        'día': [date_pd.day], 
-        'díadelasemana': [date_pd.dayofweek],
-        'mes': [date_pd.month], 
-        'trimestre': [date_pd.quarter],
-        'año': [date_pd.year], 
-        'díadelaño': [date_pd.dayofyear]
+        'día': [date_pd.day], 'díadelasemana': [date_pd.dayofweek],
+        'mes': [date_pd.month], 'trimestre': [date_pd.quarter],
+        'año': [date_pd.year], 'díadelaño': [date_pd.dayofyear]
     })
 
-# --- ENCABEZADO ---
-st.title("🍗 Proyección de Demanda Pollo Supermercado")
-st.markdown("---")
-
-# --- SIDEBAR (CONFIGURACIÓN) ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Configuración")
-    fecha_sel = st.date_input(" Fecha a Predecir", datetime.now())
+    fecha_sel = st.date_input(" Fecha de Inicio", datetime(2025, 11, 17))
     
     st.divider()
     st.subheader("📊 Datos de Entrada")
     lag1 = st.number_input("Ventas Ayer ($)", value=15000)
     lag7 = st.number_input("Ventas hace 7 días ($)", value=14500)
     roll7 = st.number_input("Promedio Semanal ($)", value=14800)
-    
-    predict_btn = st.button("Calcular Predicción", use_container_width=True)
+    predict_btn = st.button("Calcular Proyección", use_container_width=True)
 
 # --- LÓGICA DE PREDICCIÓN ---
 pred = None
-if predict_btn:
-    if model:
-        features_df = create_features_row(fecha_sel)
-        # Asignación de variables según el entrenamiento del modelo
-        features_df['Ventas_Netas_lag1'] = lag1
-        features_df['Ventas_Netas_lag7'] = lag7
-        features_df['Ventas_Netas_lag14'] = lag7 * 0.95
-        features_df['Ventas_Netas_lag30'] = lag7 * 1.05
-        features_df['Ventas_Netas_rolling7'] = roll7
-        features_df['Ventas_Netas_rolling30'] = roll7 * 0.98
-
-        order = ['día', 'díadelasemana', 'mes', 'trimestre', 'año', 'díadelaño',
-                'Ventas_Netas_lag1', 'Ventas_Netas_lag7', 'Ventas_Netas_lag14', 
-                'Ventas_Netas_lag30', 'Ventas_Netas_rolling7', 'Ventas_Netas_rolling30']
-        
-        # Realizar la predicción
-        pred = model.predict(features_df[order])[0]
-    else:
-        st.error("Modelo no disponible.")
-
-# --- CUERPO PRINCIPAL ---
-col_stats, col_chart = st.columns([1, 2], gap="large")
-
-with col_stats:
-    st.subheader("Resultado")
-    if pred is not None:
-        # Métrica principal con indicador de cambio (delta)
-        delta_val = ((pred / lag1) - 1) * 100
-        st.metric(
-            label=f"Venta Predicha ({fecha_sel})", 
-            value=f"${pred:,.2f}", 
-            delta=f"{delta_val:.2f}% vs ayer"
-        )
-        
-        with st.expander("🔍 Ver variables del modelo"):
-            st.dataframe(features_df[order].T, column_config={"0": "Valor"})
-    else:
-        st.info("Ajusta los parámetros en el panel izquierdo y presiona 'Calcular Predicción'.")
-
-with col_chart:
-    st.subheader("📈 Análisis de Tendencias")
+if predict_btn and model:
+    features_df = create_features_row(fecha_sel)
+    features_df['Ventas_Netas_lag1'] = lag1
+    features_df['Ventas_Netas_lag7'] = lag7
+    features_df['Ventas_Netas_lag14'] = lag7 * 0.95
+    features_df['Ventas_Netas_lag30'] = lag7 * 1.05
+    features_df['Ventas_Netas_rolling7'] = roll7
+    features_df['Ventas_Netas_rolling30'] = roll7 * 0.98
     
-    # Datos simulados (Reemplaza con pd.read_csv('tu_archivo.csv') para datos reales)
-    fechas_hist = pd.date_range(end=datetime.now(), periods=30)
-    ventas_hist = np.random.normal(15000, 1200, size=30)
+    order = ['día', 'díadelasemana', 'mes', 'trimestre', 'año', 'díadelaño',
+            'Ventas_Netas_lag1', 'Ventas_Netas_lag7', 'Ventas_Netas_lag14', 
+            'Ventas_Netas_lag30', 'Ventas_Netas_rolling7', 'Ventas_Netas_rolling30']
+    pred = model.predict(features_df[order])[0]
+
+# --- UI PRINCIPAL ---
+st.title("🍗 Proyección de Demanda Pollo Supermercado")
+st.markdown("---")
+
+col1, col2 = st.columns([1, 2], gap="large")
+
+with col1:
+    st.subheader("Resultado")
+    if pred:
+        delta_val = ((pred / lag1) - 1) * 100
+        st.metric(label=f"Venta Predicha para {fecha_sel}", value=f"${pred:,.2f}", delta=f"{delta_val:.2f}% vs ayer")
+    else:
+        st.info("Selecciona una fecha y presiona el botón para ver la proyección hacia adelante.")
+
+with col2:
+    st.subheader(f"📈 Proyección a partir del {fecha_sel}")
+    
+    # AJUSTE: Generamos fechas desde fecha_sel HACIA ADELANTE
+    fechas_futuras = pd.date_range(start=pd.Timestamp(fecha_sel), periods=30)
+    
+    # Simulamos valores que parten desde nuestra predicción (o desde lag1 si no hay pred)
+    start_value = pred if pred else lag1
+    ventas_proyectadas = np.random.normal(start_value, 1000, size=30)
+    # Forzamos que el primer punto de la serie sea exactamente nuestra predicción
+    if pred:
+        ventas_proyectadas[0] = pred
     
     fig = go.Figure()
 
-    # Gráfica de área para el histórico
+    # Gráfica de área proyectada
     fig.add_trace(go.Scatter(
-        x=fechas_hist, y=ventas_hist,
-        mode='lines',
-        name='Histórico',
-        line=dict(color='#ff4b4b', width=2),
-        fill='tozeroy',
-        fillcolor='rgba(255, 75, 75, 0.2)'
+        x=fechas_futuras, 
+        y=ventas_proyectadas, 
+        mode='lines+markers', 
+        line=dict(color='#ff4b4b', width=2), 
+        fill='tozeroy', 
+        name="Proyección",
+        marker=dict(size=4)
     ))
-
-    # ETIQUETA DE DATOS: Si hay predicción, agregar punto destacado con texto
-    if pred is not None:
+    
+    if pred:
+        # Destacamos el punto inicial (la predicción solicitada)
         fig.add_trace(go.Scatter(
-            x=[pd.Timestamp(fecha_sel)], 
+            x=[fechas_futuras[0]], 
             y=[pred],
             mode='markers+text',
-            name='Predicción Actual',
-            text=[f"Predicción: ${pred:,.0f}"],
-            textposition="top center",
+            text=[f"Inicio: ${pred:,.0f}"],
+            textposition="top right",
             marker=dict(color='black', size=12, symbol='diamond'),
-            textfont=dict(size=14, color="black", family="Arial Black")
+            name="Punto de partida"
         ))
-    
+
     fig.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=0, r=0, t=30, b=0),
-        height=400,
-        showlegend=False,
-        yaxis=dict(gridcolor='LightGray', title="Ventas ($)"),
-        xaxis=dict(showgrid=False)
+        height=400, 
+        margin=dict(l=0,r=0,t=0,b=0), 
+        showlegend=False, 
+        xaxis=dict(showgrid=False, title="Futuro"), 
+        yaxis=dict(title="Ventas Estimadas ($)")
     )
-    
     st.plotly_chart(fig, use_container_width=True)
 
 # --- TABLA INFERIOR ---
-st.divider()
-st.subheader("📋 Resumen de datos recientes")
-df_resumen = pd.DataFrame({'Fecha': fechas_hist, 'Ventas': ventas_hist}).sort_values(by='Fecha', ascending=False)
-st.dataframe(df_resumen.head(5), use_container_width=True)
+if pred:
+    st.divider()
+    st.subheader("📋 Detalle de los próximos 7 días (Simulados)")
+    df_proy = pd.DataFrame({'Fecha': fechas_futuras, 'Venta Est.': ventas_proyectadas})
+    st.dataframe(df_proy.head(7), use_container_width=True)
