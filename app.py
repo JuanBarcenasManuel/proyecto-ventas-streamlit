@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Predicción Pollo", layout="wide", page_icon="🍗")
 
-# --- CSS PERSONALIZADO ---
+# --- ESTILO CSS ---
 st.markdown("""
     <style>
     .stMetric { 
@@ -43,19 +43,20 @@ def create_features_row(date):
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Configuración")
-    fecha_sel = st.date_input(" Fecha de Inicio", datetime(2025, 11, 17))
+    fecha_sel = st.date_input("Fecha de Inicio", datetime(2025, 11, 17))
     
     st.divider()
     st.subheader("📊 Datos de Entrada")
     lag1 = st.number_input("Ventas Ayer ($)", value=15000)
     lag7 = st.number_input("Ventas hace 7 días ($)", value=14500)
     roll7 = st.number_input("Promedio Semanal ($)", value=14800)
-    predict_btn = st.button("Calcular Proyección", use_container_width=True)
+    predict_btn = st.button(" Calcular Proyección", use_container_width=True)
 
 # --- LÓGICA DE PREDICCIÓN ---
 pred = None
 if predict_btn and model:
     features_df = create_features_row(fecha_sel)
+    # Llenado de características para el modelo
     features_df['Ventas_Netas_lag1'] = lag1
     features_df['Ventas_Netas_lag7'] = lag7
     features_df['Ventas_Netas_lag14'] = lag7 * 0.95
@@ -75,63 +76,61 @@ st.markdown("---")
 col1, col2 = st.columns([1, 2], gap="large")
 
 with col1:
-    st.subheader("Resultado")
+    st.subheader("🎯 Resultado de Predicción")
     if pred:
         delta_val = ((pred / lag1) - 1) * 100
-        st.metric(label=f"Venta Predicha para {fecha_sel}", value=f"${pred:,.2f}", delta=f"{delta_val:.2f}% vs ayer")
+        st.metric(
+            label=f"Valor Predicho para {fecha_sel}", 
+            value=f"${pred:,.2f}", 
+            delta=f"{delta_val:.2f}% vs ayer"
+        )
     else:
-        st.info("Selecciona una fecha y presiona el botón para ver la proyección hacia adelante.")
+        st.info("Presiona el botón para generar la etiqueta de datos en la gráfica.")
 
 with col2:
-    st.subheader(f"📈 Proyección a partir del {fecha_sel}")
+    st.subheader(f"📈 Tendencia Proyectada (Desde {fecha_sel})")
     
-    # AJUSTE: Generamos fechas desde fecha_sel HACIA ADELANTE
+    # Generamos 30 días hacia adelante
     fechas_futuras = pd.date_range(start=pd.Timestamp(fecha_sel), periods=30)
-    
-    # Simulamos valores que parten desde nuestra predicción (o desde lag1 si no hay pred)
     start_value = pred if pred else lag1
-    ventas_proyectadas = np.random.normal(start_value, 1000, size=30)
-    # Forzamos que el primer punto de la serie sea exactamente nuestra predicción
+    ventas_proyectadas = np.random.normal(start_value, 800, size=30)
+    
     if pred:
         ventas_proyectadas[0] = pred
-    
+
     fig = go.Figure()
 
-    # Gráfica de área proyectada
+    # 1. Línea de proyección
     fig.add_trace(go.Scatter(
         x=fechas_futuras, 
         y=ventas_proyectadas, 
-        mode='lines+markers', 
-        line=dict(color='#ff4b4b', width=2), 
-        fill='tozeroy', 
-        name="Proyección",
-        marker=dict(size=4)
+        mode='lines', 
+        line=dict(color='#ff4b4b', width=3), 
+        fill='tozeroy',
+        name="Tendencia"
     ))
-    
+
+    # 2. LA ETIQUETA DE RESULTADO (Punto destacado con texto)
     if pred:
-        # Destacamos el punto inicial (la predicción solicitada)
         fig.add_trace(go.Scatter(
             x=[fechas_futuras[0]], 
             y=[pred],
             mode='markers+text',
-            text=[f"Inicio: ${pred:,.0f}"],
-            textposition="top right",
-            marker=dict(color='black', size=12, symbol='diamond'),
-            name="Punto de partida"
+            text=[f"PREDICCIÓN: ${pred:,.0f}"], # <-- AQUÍ ESTÁ LA ETIQUETA
+            textposition="top center",
+            textfont=dict(family="Arial Black", size=14, color="black"),
+            marker=dict(color='black', size=15, symbol='diamond-dot'),
+            name="Resultado"
         ))
 
     fig.update_layout(
-        height=400, 
-        margin=dict(l=0,r=0,t=0,b=0), 
+        height=450, 
+        margin=dict(l=0, r=0, t=40, b=0), 
         showlegend=False, 
-        xaxis=dict(showgrid=False, title="Futuro"), 
-        yaxis=dict(title="Ventas Estimadas ($)")
+        xaxis=dict(showgrid=False),
+        yaxis=dict(title="Ventas Estimadas ($)", gridcolor='rgba(0,0,0,0.1)')
     )
+    
     st.plotly_chart(fig, use_container_width=True)
 
-# --- TABLA INFERIOR ---
-if pred:
-    st.divider()
-    st.subheader("📋 Detalle de los próximos 7 días (Simulados)")
-    df_proy = pd.DataFrame({'Fecha': fechas_futuras, 'Venta Est.': ventas_proyectadas})
-    st.dataframe(df_proy.head(7), use_container_width=True)
+st.divider()
