@@ -53,14 +53,14 @@ def create_features_row(date):
     })
 
 # --- ENCABEZADO ---
-st.title("🍗 Proyección de Demanda: Avícola")
+st.title("Proyección de Demanda: Pollo")
 st.markdown("---")
 
 # --- SIDEBAR (CONFIGURACIÓN) ---
 with st.sidebar:
     st.header("⚙️ Configuración")
     # Fecha inicial: Noviembre 2025
-    fecha_sel = st.date_input("📅 Fecha de Inicio Proyección", datetime(2025, 11, 17))
+    fecha_sel = st.date_input("Fecha de Inicio Proyección", datetime(2025, 11, 17))
     
     st.divider()
     st.subheader("📊 Datos de Entrada")
@@ -68,7 +68,7 @@ with st.sidebar:
     lag7 = st.number_input("Ventas hace 7 días ($)", value=14500)
     roll7 = st.number_input("Promedio Semanal ($)", value=14800)
     
-    predict_btn = st.button("🚀 Calcular Proyección", use_container_width=True)
+    predict_btn = st.button(" Calcular Proyección", use_container_width=True)
 
 # --- LÓGICA DE PREDICCIÓN ---
 if 'pred' not in st.session_state:
@@ -97,7 +97,7 @@ col_stats, col_chart = st.columns([1, 2], gap="large")
 pred = st.session_state.pred
 
 with col_stats:
-    st.subheader("🎯 Resultado")
+    st.subheader(" Resultado")
     if pred is not None:
         delta_val = ((pred / lag1) - 1) * 100
         st.metric(
