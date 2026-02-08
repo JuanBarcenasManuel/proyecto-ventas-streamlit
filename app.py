@@ -4,24 +4,37 @@ import numpy as np
 import pickle
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+import os
 
-# --- 1. CONFIGURACIÓN ---
-st.set_page_config(page_title="Predicción Pollo", layout="wide", page_icon="🍗")
+# --- 1. CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(page_title="Predicción Ventas Pollo", layout="wide", page_icon="🍗")
 
-# --- 2. CARGAR MODELO ---
+# --- 2. CARGAR MODELO (CON RUTA ABSOLUTA) ---
 @st.cache_resource
 def load_model():
+    # Buscamos la carpeta donde está este archivo app.py
+    ruta_base = os.path.dirname(__file__)
+    # Unimos la carpeta con el nombre del archivo
+    ruta_modelo = os.path.join(ruta_base, 'model.pkl')
+    
     try:
-        with open('model.pkl', 'rb') as f:
+        with open(ruta_modelo, 'rb') as f:
             return pickle.load(f)
-    except:
+    except FileNotFoundError:
+        # Si falla, intentamos la carga simple por si acaso
+        try:
+            with open('model.pkl', 'rb') as f:
+                return pickle.load(f)
+        except:
+            return None
+    except Exception as e:
         return None
 
 model = load_model()
 
-# Inicializamos el estado de la predicción si no existe
-if 'mi_prediccion' not in st.session_state:
-    st.session_state.mi_prediccion = None
+# Inicializar memoria de la predicción
+if 'pred_valor' not in st.session_state:
+    st.session_state.pred_valor = None
 
 def create_features_row(date):
     date_pd = pd.Timestamp(date)
@@ -31,10 +44,11 @@ def create_features_row(date):
         'año': [date_pd.year], 'díadelaño': [date_pd.dayofyear]
     })
 
-# --- 3. SIDEBAR ---
+# --- 3. SIDEBAR (CONFIGURACIÓN) ---
 with st.sidebar:
     st.header("⚙️ Configuración")
     fecha_sel = st.date_input("📅 Fecha de Inicio", datetime(2025, 11, 11))
+    
     st.divider()
     st.subheader("📊 Datos de Entrada")
     lag1 = st.number_input("Ventas Ayer ($)", value=15000)
@@ -42,8 +56,9 @@ with st.sidebar:
     roll7 = st.number_input("Promedio Semanal ($)", value=14800)
     
     if st.button("🚀 Calcular Proyección", use_container_width=True):
-        if model:
+        if model is not None:
             features_df = create_features_row(fecha_sel)
+            # Preparar datos para el modelo
             features_df['Ventas_Netas_lag1'] = lag1
             features_df['Ventas_Netas_lag7'] = lag7
             features_df['Ventas_Netas_lag14'] = lag7 * 0.95
@@ -55,64 +70,64 @@ with st.sidebar:
                     'Ventas_Netas_lag1', 'Ventas_Netas_lag7', 'Ventas_Netas_lag14', 
                     'Ventas_Netas_lag30', 'Ventas_Netas_rolling7', 'Ventas_Netas_rolling30']
             
-            # GUARDAMOS EN EL SESSION STATE
-            resultado = model.predict(features_df[order])[0]
-            st.session_state.mi_prediccion = resultado
+            # Realizar y guardar predicción
+            res = model.predict(features_df[order])[0]
+            st.session_state.pred_valor = res
         else:
-            st.error("No se encontró el archivo model.pkl")
+            st.error("⚠️ Error: El archivo 'model.pkl' no se pudo cargar. Revisa que esté en la raíz de tu GitHub.")
 
-# --- 4. UI PRINCIPAL ---
+# --- 4. CUERPO PRINCIPAL ---
 st.title("🍗 Dashboard de Proyección: Pollo")
 
-col1, col2 = st.columns([1, 2])
+if model is None:
+    st.warning("⚠️ El modelo no está cargado. Asegúrate de que 'model.pkl' esté en tu repositorio de GitHub.")
 
-# Recuperamos el valor del estado persistente
-pred_final = st.session_state.mi_prediccion
+col1, col2 = st.columns([1, 2], gap="large")
+
+pred_actual = st.session_state.pred_valor
 
 with col1:
     st.subheader("🎯 Resultado")
-    if pred_final is not None:
-        st.metric(label=f"Predicción {fecha_sel}", value=f"${pred_final:,.2f}")
+    if pred_actual is not None:
+        st.metric(label=f"Predicción para {fecha_sel}", value=f"${pred_actual:,.2f}")
     else:
-        st.info("Presiona el botón para calcular.")
+        st.info("Configura los datos y presiona el botón.")
 
 with col2:
     st.subheader("📈 Gráfico de Tendencia")
     
-    # Datos de la serie
+    # Datos para graficar
     fechas_futuras = pd.date_range(start=pd.Timestamp(fecha_sel), periods=30)
-    base = pred_final if pred_final is not None else lag1
-    
-    # Generamos una serie que siempre empiece en el valor de la predicción
-    ventas_proy = np.random.normal(base, 600, size=30)
-    if pred_final is not None:
-        ventas_proy[0] = pred_final
+    inicio_y = pred_actual if pred_actual is not None else lag1
+    ventas_y = np.random.normal(inicio_y, 600, size=30)
+    if pred_actual is not None:
+        ventas_y[0] = pred_actual
 
     fig = go.Figure()
 
-    # Línea de tendencia
+    # Línea principal
     fig.add_trace(go.Scatter(
-        x=fechas_futuras, y=ventas_proy,
+        x=fechas_futuras, y=ventas_y,
         mode='lines+markers',
         line=dict(color='#ff4b4b', width=3),
         name="Proyección"
     ))
 
-    # SOLO DIBUJAMOS LA ETIQUETA SI YA SE CALCULÓ
-    if pred_final is not None:
-        # El diamante negro
+    # ETIQUETA FORZADA
+    if pred_actual is not None:
+        # Diamante
         fig.add_trace(go.Scatter(
-            x=[fechas_futuras[0]], y=[pred_final],
+            x=[fechas_futuras[0]], y=[pred_actual],
             mode='markers',
             marker=dict(color='black', size=15, symbol='diamond'),
             showlegend=False
         ))
 
-        # LA ANOTACIÓN (Burbuja de texto)
+        # Cuadro de texto (Anotación)
         fig.add_annotation(
             x=fechas_futuras[0],
-            y=pred_final,
-            text=f"<b>VALOR PREDICHO:<br>${pred_final:,.0f}</b>",
+            y=pred_actual,
+            text=f"<b>VALOR PREDICHO:<br>${pred_actual:,.0f}</b>",
             showarrow=True,
             arrowhead=2,
             ax=50, ay=-50,
@@ -124,7 +139,7 @@ with col2:
     fig.update_layout(
         height=450,
         margin=dict(l=0, r=0, t=30, b=0),
-        yaxis=dict(range=[min(ventas_proy)*0.8, max(ventas_proy)*1.3]) # Espacio para la etiqueta
+        yaxis=dict(range=[min(ventas_y)*0.8, max(ventas_y)*1.3])
     )
     
     st.plotly_chart(fig, use_container_width=True)
