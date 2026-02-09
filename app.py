@@ -53,7 +53,7 @@ def create_features_row(date):
     })
 
 # --- ENCABEZADO ---
-st.title("Proyección de Demanda: Pollo")
+st.title("Proyección de Demanda: Pollo Supermercado")
 st.markdown("---")
 
 # --- SIDEBAR (CONFIGURACIÓN) ---
